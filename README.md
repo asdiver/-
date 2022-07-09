@@ -197,6 +197,47 @@ if(/Android|webOS|iPhone|iPod|BlackBerry/i.test(navigator.userAgent)) {
 
 描述：开发接口
 
+- mysql
+  
+  timestamp转时间戳 函数unix_timestamp()
+  
+  时间戳转timetamp 函数FROM_UNIXTIME()
+  
+- js时间戳
+  
+  js时间戳精确到毫秒数 有13位 而mysql的时间戳单位是秒 有10位
+  
+  [Unix时间戳(Unix timestamp)转换工具 - 站长工具 (chinaz.com)](https://tool.chinaz.com/Tools/unixtime.aspx)
+  
+
+## 22-7-9
+
+描述：开发接口
+
+剩下三分二的群聊模块和http轮询 预计一天完成 最多两天完成 如何就可以开始前端开发
+
+- 陌生人匹配模块的部分接口的service复用用户模块
+  
+- js取随机整数 包含最大最小值
+  
+  ```js
+  function getRandomIntInclusive(min, max) {
+    min = Math.ceil(min);
+    max = Math.floor(max);
+    return Math.floor(Math.random() * (max - min + 1)) + min; //含最大值，含最小值 
+  }
+  ```
+  
+- 需要对时间字符串表达格式化
+  
+  - 简单的Date时间 格式化 （固定的格式）（ 自定义格式方法暂不写）
+  
+  ```js
+  `${now.getFullYear()}-${now.getMonth()}-${now.getDate()} ${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`
+  ```
+  
+  - 后面发现date有专门方法 toLocaleString()
+
 ### 完善和理清 举报用户冻结机制
 
 细见文档
