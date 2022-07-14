@@ -73,7 +73,7 @@ if(/Android|webOS|iPhone|iPod|BlackBerry/i.test(navigator.userAgent)) {
   
   前端部分
   
-  ```
+  ```js
   document.querySelector("input").addEventListener('input',(e)=>{
               const file =  e.target.files[0]
               let param = new FormData()  // 创建form对象
@@ -210,6 +210,10 @@ if(/Android|webOS|iPhone|iPod|BlackBerry/i.test(navigator.userAgent)) {
   [Unix时间戳(Unix timestamp)转换工具 - 站长工具 (chinaz.com)](https://tool.chinaz.com/Tools/unixtime.aspx)
   
 
+### 完善和理清 举报用户冻结机制
+
+细见文档
+
 ## 22-7-9
 
 描述：开发接口
@@ -238,15 +242,268 @@ if(/Android|webOS|iPhone|iPod|BlackBerry/i.test(navigator.userAgent)) {
   
   - 后面发现date有专门方法 toLocaleString()
 
-### 完善和理清 举报用户冻结机制
+## 22-7-10
 
-细见文档
+描述：完成剩下的接口开发
+
+- mysql包中执行 update 语句时候 其返回的对象下的affectedRows属性是where匹配到的行数 而不是受到改变的行数 注意一下
+  
+- 群聊天的聊天记录获取，按理来说前端显示聊天记录的同时应该显示用户的头像等信息 者导致后端还要连表查询用户信息，但是有一个接口是查询群成员信息，所以这部分交给前端处理
+  
+- 群冻结和用户冻结的判定机制 一样 但是不需要考虑登录等情况，只需在用户发言时候：如果群冻结则阻止
+  
+
+### http轮询设计方案
+
+##### 思路
+
+对于后端来说是一个接口，需要考虑查询哪些数据，哪些数据需要更新
+
+对于前端来说， 是多个请求分别对应页面各个内容，还是只有一个轮询请求完成对所有数据的更新。
+
+显然，第一种会导致多个http轮询 不好管控，且会造成频繁的网络请求，效率 （作用/消耗的资源） 低下。第二种只使用一个轮询，好管控，但是前端要布局好数据的传递，http请求的数据所在页面/域 传递到另一个组件/页面 像一个树型结构
+
+##### 方案
+
+后端：
+
+使用前端传递的时间戳和数据库的create/update（创建/更新时间字段）进行比较 大于当前时间视为更新 加入http数据之中
+
+更新的字段:
+
+1. 消息(群新消息,私聊新消息) 两个消息表中的 create字段
+  
+2. 被动删(群被踢出,私聊被删) 两个关系表中的 update字段
+  
+3. 被动新增(有新好友,新群友) 两个关系表中的 create字段
+  
+
+http轮询需要一个时间戳来**界定新旧数据** 而这个时间戳的获取来源有两种方案
+
+1：由用户登录后 初始数据里记录的数据库时间戳(前端获取好友列表后 得到好友列表里的最后更新时间 交由轮序接口)
+
+2：在后端接受到请求后生成当前时间 然后查询 把时间也返回给后端 作为下次更新时间戳
+
+第一种的时间戳获取更加的**精确** 第二种**开销小** 但是可能产生重复数据，为什么呢 因为在后端的步骤是：
+
+获取前端传来的上一次**更新时间戳**
+
+=>获取**当前时间戳**
+
+=> 使用**前端更新时间戳**执行查询数据库，加入js队列
+
+=>回调，获取数据 返回前端，同时带上**当前时间戳**作为下一次的**更新时间戳**
+
+但是js是单线程,存在一种情况：后端在获取 **当前时间戳** 到 查询完数据 期间 **有新的记录加入到了数据库** 这将导致数据库查询获取的数据的**时间点**存在大于**当前时间戳** 的数据 导致这类数据在下次轮询时也会被查询到 导致重复数据 所以 前端需要实现对重复数据的过滤
+
+三个列表的更新（群列表 好友列表，匿名列表）的排重简单
+
+但是消息的排重需要一定的考究 假如前端当前有十条记录 两次分页 一页五条 每次新聊天记录获取后我只会对当前数据最新五条来参考排重 而不是十条
+
+同时消息的结构更加复杂 列表的更新都是同一个数组下 而消息的更新是对应不同对象的聊天记录数组
+
+## 22-7-11
+
+描述：开始构思前端 http轮询接口到前端具体使用时再写
+
+1 使用的框架vue vue全家桶的使用 router/vuex, vue脚手架中的配置选择/插件 babel等
+
+2 项目结构
+
+3 工具包：防抖，节流方法的生成函数 可能需要 promise
+
+4 axios 发送http请求的封装 配置 api编写形式
+
+5 移动端还是pc端
+
+6 页面样式 前端的布局 对应的数据结构 组件通信
+
+- vue add 和npm install区别
+  
+  npm的引入是单纯的把目标资源下载
+  
+  而vue add在npm引入的基础上 提供一些由编写者预设的一些基础配置，它会更改当前文件结构
+  
+- vuecli初始化配置preset
+  
+  - Choose Vue version vue版本选择 （vue3）
+    
+  - Babel 是否兼容低版本浏览器 js编译器 把高级语法转为浏览器支持的语法
+    
+  - TypeScript 是否扩展JavaScript （不使用）
+    
+  - Progressive Web App (PWA) Support 渐进式Web应用程序(web服务基于浏览器 pwa是web服务一个较新的概念 目标：使web服务像一个应用程序一样使用 ) (不使用)
+    
+  - Router 是否配置路由 （使用）
+    
+  - Vuex 是否配置状态管理模式（相当于本地全局数据存储仓库）
+    
+  - CSS Pre-processors CSS预处理器（使用）
+    
+  - Linter / Formatter 格式化程序规范选择 （使用）
+    
+  - Unit Testing 是否创建单元测试
+    
+  - E2E Testing 是否创建端到端测试
+    
+- vue 中 linter 的4种配置及其官方说明
+  
+  1、[ESLint](https://so.csdn.net/so/search?q=ESLint&spm=1001.2101.3001.7020) with error prevention only
+  
+  > 只配置使用 ESLint 官网的推荐规则  
+  > 这些规则在这里 [添加链接描述](https://eslint.bootcss.com/docs/rules/)
+  
+  2、ESLint + Airbnb config 爱彼迎规范
+  
+  > 使用 ESLint 官网推荐的规则 + Airbnb 第三方的配置  
+  > Airbnb 的规则在这里 [添加链接描述](https://github.com/airbnb/javascript)
+  
+  3、ESLint + Standard config 通用规范
+  
+  > 使用 ESLint 官网推荐的规则 + Standard 第三方的配置  
+  > Standard 的规则在这里 [添加链接描述](https://github.com/standard/standard/blob/master/docs/RULES-zhcn.md#javascript-standard-style)
+  
+  4、ESLint + Prettier 比较漂亮的规范
+  
+  > 使用 ESLint 官网推荐的规则 + Prettier 第三方的配置  
+  > Prettier 主要是做风格统一。代码格式化工具[Options · Prettier](https://prettier.io/docs/en/options.html)
+  
+  这里我使用第四种
+  
+
+## 22-7-12
+
+描述：搭建前端项目
+
+- 防抖和节流(重点在思想 具体实现不同人的代码细节不同)
+  
+  防抖：一段时间内的频繁触发只执行最后一次
+  
+  ```js
+  const antiShake = (func,delay)=>{
+      let timeouter;
+      return function(e){
+          clearTimeout(timeouter);
+          timeouter = setTimeout(()=>{
+              func(e)
+          }, delay); 
+      }
+  };
+  ```
+  
+  节流：控制多次执行之间的时间间隔最小值
+  
+  节流有两种写法 一种是settimeout 一种是用时间戳 我选择时间戳 因为我把节流用于发起请求的场景 时间戳一旦触发就可以执行 但是settimeout有延迟 减低用户使用体验
+  
+  ```js
+  const antiShake = (func,delay)=>{
+      let timeouter;
+      return function(e){
+          clearTimeout(timeouter);
+          timeouter = setTimeout(()=>{
+              func(e)
+          }, delay); 
+      }
+  };
+  ```
+  
+  ps：我写的这两种函数默认为一个传参 方式 多个传参方式需要arguments
+  
+
+## 22-7-13
+
+描述：开始尝试写前端登录页面（挺久没动vue全家桶，本来就不算熟练更是忘了）
+
+- 登录页面：选用一张大规模的图片作为div背景 div的大小为全屏，因为不同屏幕的宽高比是不一样的，所以不能奢求一张图片和屏幕完全吻合,所以使用铺满不重复来应对不同屏幕
+  
+  ```css
+      background-size: cover;
+      background-repeat: no-repeat;
+  ```
+  
+- css 的 :root 和var()
+  
+  在element plus的教程中的颜色配置中发现这一个新的知识点[Color 色彩 | Element Plus](https://element-plus.gitee.io/zh-CN/component/color.html)
+  
+  :root是一个伪类 其中的键值对可以在其他css代码中通过var(key得到)
+  
+  在:root中配置通用值以在其他css使用
+  
+- vue生命周期与js代码
+  
+  ```js
+  <script>
+  const file =  document.querySelector(".test")
+  const a = 111111111
+  export default {
+    name:"LoginView",
+    beforeCreate(){
+  
+    },
+    mounted() {
+      console.log(a);
+      const clientHeight = document.documentElement.clientHeight;
+      const img =  document.querySelector(".background");
+      img.style.height = clientHeight + "px"
+    },
+    data(){
+      return {
+          input:"rdfrtg"
+      }
+    },
+    methods:{
+      chooseFile(){
+  
+          file.clic
+  k()
+      }
+    }
+  }
+  </script>
+  ```
+  
+  场景：在创建vue实例的代码中export default {} 我需要在外部声明变量并在实例中使用（const file = document.querySelector(".test")） 但实际上 我拿不到file对象 会是null ,html代码也没有错，我的理解是 在vue实例的生命周期中先读取script的代码生成实例，但此时并没有对html渲染，导致file无法获取对象，这段代码的赋值应当在mounted函数中
+  
+- **图片选择及其预览**
+  
+  原生的input文件选择不好看 而且要图片预览不只显示文件名称，所以把input的宽度设置为0，替代的按钮 点击时候触发input的click事件，
+  
+  图片选择后展示：
+  
+  ```js
+      getFile(e){
+              let reader = new FileReader();
+              reader.onload = function () {
+                  document.querySelector('.background-main-show').src = this.result;
+              };
+              // 设置以什么方式读取文件，这里以base64方式
+              reader.readAsDataURL(e.target.files[0]);
+          },
+  ```
+  
+  FileReade为文件读取对象
+  
+  onload 回调函数 文件读取完成后调用
+  
+  src 修改图片元素的内容
+  
+  readAsDataURL 开始读取
+  
+
+## 22-7-14
+
+描述：登录页面本身内容写完，打通一套完整的封装，项目结构，防抖节流 axios封装 等的完善（**实践获取经验，第一次真正意义上的自己写的vue项目，很多封装，简单轮子自己摸索**）
+
+- 退出登录并不需要后端 删除此接口
+  
+- 起因：封装axios，实践后发现：在js对象转json中 undefined的属性将不会转化到json中，情理之中
+  
 
 # bug
 
 - 前端上传文件使用formdata对象时 param.append('file', file, 'name') 第三个参数为文件名称 默认为原始名称 如果重写时候不屑文件后缀后端将获取不到文件后缀名
 
-# 遗留
+# 遗留/未知问题
 
 - ### 内容：stream is not readable
   
